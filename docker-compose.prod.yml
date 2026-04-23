@@ -1,0 +1,18 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pp-app
+    ports:
+      - "8080:8080"
+    volumes:
+      - sqlite-data:/data
+    environment:
+      # Comma-separated host patterns. Leave empty to accept any origin (dev).
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}
+      - COOKIE_SECURE=${COOKIE_SECURE:-true}
+    restart: unless-stopped
+
+volumes:
+  sqlite-data:

@@ -1,0 +1,4 @@
+/* Reset handled in App.css. Keep this file minimal so App.css is the source of truth. */
+body {
+  margin: 0;
+}

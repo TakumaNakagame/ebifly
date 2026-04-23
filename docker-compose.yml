@@ -1,0 +1,31 @@
+services:
+  backend:
+    build: ./backend
+    container_name: pp-backend
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./backend:/app
+      - backend-mod-cache:/go/pkg
+      - sqlite-data:/data
+    working_dir: /app
+    environment:
+      - GOFLAGS=-mod=mod
+
+  frontend:
+    build: ./frontend
+    container_name: pp-frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - frontend-node-modules:/app/node_modules
+    environment:
+      - VITE_BACKEND_INTERNAL=http://backend:8080
+    depends_on:
+      - backend
+
+volumes:
+  backend-mod-cache:
+  sqlite-data:
+  frontend-node-modules:
