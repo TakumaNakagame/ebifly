@@ -9,7 +9,7 @@ COPY frontend/ ./
 RUN npm run build
 
 # --- Stage 2: build Go binary with embedded frontend ---
-FROM golang:1.25 AS backend
+FROM golang:1.26 AS backend
 WORKDIR /app
 COPY backend/go.mod backend/go.sum ./
 RUN go mod download
