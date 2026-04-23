@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
+import { isGranted } from '../lib/consent'
 
 export type ThemeChoice = 'auto' | 'light' | 'dark'
 
 const KEY = 'pp.theme'
 
 function read(): ThemeChoice {
+  if (!isGranted()) return 'auto'
   const v = localStorage.getItem(KEY)
   return v === 'light' || v === 'dark' ? v : 'auto'
 }
@@ -28,6 +30,7 @@ export function useTheme() {
   const setTheme = useCallback((next: ThemeChoice) => {
     setThemeState(next)
     apply(next)
+    if (!isGranted()) return
     if (next === 'auto') localStorage.removeItem(KEY)
     else localStorage.setItem(KEY, next)
   }, [])

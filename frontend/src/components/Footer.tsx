@@ -1,4 +1,9 @@
+import { useConsent } from '../hooks/useConsent'
+
 export default function Footer() {
+  const { consent, reset } = useConsent()
+  const statusLabel =
+    consent === 'granted' ? '同意済' : consent === 'denied' ? '拒否中' : '未選択'
   return (
     <footer className="page-footer">
       <a
@@ -23,6 +28,14 @@ export default function Footer() {
       >
         GitHub ↗
       </a>
+      <span className="sep">·</span>
+      <button
+        className="privacy-link"
+        onClick={reset}
+        title="プライバシー設定を開いて同意状態を変更"
+      >
+        プライバシー設定 <span className="consent-status">({statusLabel})</span>
+      </button>
     </footer>
   )
 }
