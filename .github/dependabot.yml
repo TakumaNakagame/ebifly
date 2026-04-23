@@ -1,0 +1,61 @@
+version: 2
+updates:
+  # Go modules (backend)
+  - package-ecosystem: gomod
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - backend
+
+  # npm (frontend)
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - frontend
+    groups:
+      # bundle dev-only deps into a single PR per week to reduce noise
+      dev-dependencies:
+        dependency-type: development
+
+  # GitHub Actions meta (workflow dep updates)
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    labels:
+      - dependencies
+      - ci
+
+  # Docker base images
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: monthly
+    labels:
+      - dependencies
+      - docker
+
+  - package-ecosystem: docker
+    directory: /backend
+    schedule:
+      interval: monthly
+    labels:
+      - dependencies
+      - docker
+
+  - package-ecosystem: docker
+    directory: /frontend
+    schedule:
+      interval: monthly
+    labels:
+      - dependencies
+      - docker

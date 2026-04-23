@@ -8,11 +8,11 @@ import (
 const MaxThrowsPerRoom = 100
 
 // Token-bucket rate limit per participant.
-// - RefillRate tokens/sec is the sustained throughput (human hammer rate).
-// - Capacity is the burst size; at a faster hammer rate than refill, the bucket
-//   empties after roughly capacity / (hammerRate - refillRate) seconds, which
-//   is ~10s for a typical human rapid-click (~10/s vs 5/s refill). Mechanical
-//   spam beyond the bucket is silently dropped until the bucket refills.
+//   - RefillRate tokens/sec is the sustained throughput (human hammer rate).
+//   - Capacity is the burst size; at a faster hammer rate than refill, the bucket
+//     empties after roughly capacity / (hammerRate - refillRate) seconds, which
+//     is ~10s for a typical human rapid-click (~10/s vs 5/s refill). Mechanical
+//     spam beyond the bucket is silently dropped until the bucket refills.
 const (
 	BucketCapacity = 50
 	RefillRate     = 5.0 // tokens per second

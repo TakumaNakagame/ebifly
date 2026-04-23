@@ -77,8 +77,10 @@ export default function Room() {
       if (!acc[key]) acc[key] = []
       acc[key].push(t.emoji)
     }
+    // Seeding from the server's state snapshot; subsequent throws are handled
+    // by the flight effect below, not here.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setAccumulated((cur) => ({ ...cur, ...acc }))
-    // Only run on initial state messages; subsequent single-throws handled below
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view.room?.id])
 

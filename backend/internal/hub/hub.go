@@ -26,7 +26,7 @@ type Hub struct {
 
 type roomState struct {
 	mu            sync.Mutex
-	conns         map[string]*Client           // connID -> client
+	conns         map[string]*Client            // connID -> client
 	byParticipant map[string]map[string]*Client // participantID -> connID -> client
 	offlineTimers map[string]*time.Timer
 }
@@ -160,24 +160,24 @@ func (h *Hub) OnlineParticipantIDs(roomID string) map[string]bool {
 // ---- Broadcast ----
 
 type Envelope struct {
-	Type            string          `json:"type"`
-	ParticipantID   string          `json:"participantId,omitempty"`
-	Participant     json.RawMessage `json:"participant,omitempty"`
-	Participants    json.RawMessage `json:"participants,omitempty"`
-	Room            json.RawMessage `json:"room,omitempty"`
-	Votes           json.RawMessage `json:"votes,omitempty"`
-	Throws          json.RawMessage `json:"throws,omitempty"`
-	Topic           *string         `json:"topic,omitempty"`
-	HasVoted        *bool           `json:"hasVoted,omitempty"`
-	IsSpectating    *bool           `json:"isSpectating,omitempty"`
-	Stats           *room.Stats     `json:"stats,omitempty"`
-	RoundNumber     *int            `json:"roundNumber,omitempty"`
-	Emoji           string          `json:"emoji,omitempty"`
-	TargetParticipantID string      `json:"targetParticipantId,omitempty"`
-	ThrowID         string          `json:"throwId,omitempty"`
-	Code            string          `json:"code,omitempty"`
-	Message         string          `json:"message,omitempty"`
-	Online          *bool           `json:"online,omitempty"`
+	Type                string          `json:"type"`
+	ParticipantID       string          `json:"participantId,omitempty"`
+	Participant         json.RawMessage `json:"participant,omitempty"`
+	Participants        json.RawMessage `json:"participants,omitempty"`
+	Room                json.RawMessage `json:"room,omitempty"`
+	Votes               json.RawMessage `json:"votes,omitempty"`
+	Throws              json.RawMessage `json:"throws,omitempty"`
+	Topic               *string         `json:"topic,omitempty"`
+	HasVoted            *bool           `json:"hasVoted,omitempty"`
+	IsSpectating        *bool           `json:"isSpectating,omitempty"`
+	Stats               *room.Stats     `json:"stats,omitempty"`
+	RoundNumber         *int            `json:"roundNumber,omitempty"`
+	Emoji               string          `json:"emoji,omitempty"`
+	TargetParticipantID string          `json:"targetParticipantId,omitempty"`
+	ThrowID             string          `json:"throwId,omitempty"`
+	Code                string          `json:"code,omitempty"`
+	Message             string          `json:"message,omitempty"`
+	Online              *bool           `json:"online,omitempty"`
 }
 
 func (h *Hub) broadcast(roomID string, env Envelope, excludeConnID string) {

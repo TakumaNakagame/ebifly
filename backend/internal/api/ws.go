@@ -121,8 +121,8 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 const (
 	maxNameLen          = 40
 	maxTopicLen         = 200
-	maxEmojiBytes       = 32  // emoji sequences can be up to ~28 bytes; 32 is generous
-	maxParticipantIDLen = 64  // UUIDs are 36 chars; allow a little slack
+	maxEmojiBytes       = 32 // emoji sequences can be up to ~28 bytes; 32 is generous
+	maxParticipantIDLen = 64 // UUIDs are 36 chars; allow a little slack
 )
 
 // truncate returns s limited to n bytes, respecting UTF-8 boundaries. It does
@@ -132,7 +132,7 @@ func truncate(s string, n int) string {
 		return s
 	}
 	for i := n; i > 0; i-- {
-		if (s[i]&0xC0) != 0x80 { // not a UTF-8 continuation byte
+		if (s[i] & 0xC0) != 0x80 { // not a UTF-8 continuation byte
 			return s[:i]
 		}
 	}

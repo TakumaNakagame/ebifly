@@ -1,5 +1,8 @@
 # ebifly 🦐
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-ff922b.svg)](./LICENSE)
+[![Built with Claude Code](https://img.shields.io/badge/Built%20with-Claude%20Code-d18ee2)](https://claude.com/claude-code)
+
 スクラムのリファインメント向けのプランニングポーカー Web アプリ。匿名で絵文字を投げ合えるジョーク機能つき。開票時に絵文字が爆発します。
 
 ## 特徴
@@ -124,3 +127,15 @@ ebifly/
 - **スケールは単一インスタンス想定**: 接続状態が Go プロセス内に載るため、複数レプリカは不可。SQLite 単体 + 同一ノードで運用。
 - **認証なし**: ルームコードを知っていれば誰でも参加できる。外部公開する場合はリバースプロキシで認証を前段に置く（Cloudflare Access / Basic 認証 / VPN など）。
 - **履歴は保持しない**: 投票結果は次ラウンドで消える（TTL 7 日でルーム自体も消える）。
+
+## コントリビュート
+
+バグ報告・機能提案・PR 歓迎です。詳しくは [CONTRIBUTING.md](./CONTRIBUTING.md) を参照してください。
+
+## ライセンス
+
+[MIT](./LICENSE) © 2026 kameneko
+
+## AI-assisted development
+
+このプロジェクトは [Claude Code](https://claude.com/claude-code) による支援を受けて開発されています。コミット履歴に `Co-Authored-By: Claude` があるのはそのためです。
