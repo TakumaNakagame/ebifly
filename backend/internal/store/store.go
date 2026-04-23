@@ -278,6 +278,119 @@ func (s *Store) DeleteExpiredRooms(ctx context.Context, cutoffMs int64) (int64, 
 	return res.RowsAffected()
 }
 
+// DeleteRoom removes a room and (via CASCADE) its participants and votes.
+// Returns the number of rooms deleted (0 or 1).
+func (s *Store) DeleteRoom(ctx context.Context, code string) (int64, error) {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM rooms WHERE code = ?`, code)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
+// ---- Admin queries ----
+
+type RoomSummary struct {
+	ID              string
+	Code            string
+	Topic           sql.NullString
+	Phase           Phase
+	RoundNumber     int
+	CreatedAt       int64
+	LastActiveAt    int64
+	ParticipantCnt  int
+	OnlineIshCnt    int // last_seen_at within a recent window
+	VotesThisRound  int
+	SpectatorsRound int
+}
+
+// ListRoomSummaries returns one summary per room, joined with participant and
+// vote counts. `onlineCutoffMs` is the threshold below which last_seen_at is
+// considered "stale" (so participants above that are counted as "online-ish").
+func (s *Store) ListRoomSummaries(ctx context.Context, onlineCutoffMs int64) ([]*RoomSummary, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT
+			r.id, r.code, r.topic, r.phase, r.round_number, r.created_at, r.last_active_at,
+			COUNT(DISTINCT p.id)                                                AS participant_cnt,
+			COUNT(DISTINCT CASE WHEN p.last_seen_at > ? THEN p.id END)          AS online_ish,
+			COUNT(DISTINCT CASE WHEN v.value IS NOT NULL AND v.is_spectating=0
+			                     THEN v.participant_id END)                     AS votes_cast,
+			COUNT(DISTINCT CASE WHEN v.is_spectating=1
+			                     THEN v.participant_id END)                     AS spectators
+		FROM rooms r
+		LEFT JOIN participants p ON p.room_id = r.id
+		LEFT JOIN votes        v ON v.room_id = r.id AND v.round_number = r.round_number
+		GROUP BY r.id
+		ORDER BY r.last_active_at DESC
+	`, onlineCutoffMs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*RoomSummary
+	for rows.Next() {
+		var r RoomSummary
+		if err := rows.Scan(
+			&r.ID, &r.Code, &r.Topic, &r.Phase, &r.RoundNumber,
+			&r.CreatedAt, &r.LastActiveAt,
+			&r.ParticipantCnt, &r.OnlineIshCnt, &r.VotesThisRound, &r.SpectatorsRound,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, &r)
+	}
+	return out, rows.Err()
+}
+
+type Totals struct {
+	Rooms              int
+	ActiveRooms        int // last_active_at within onlineCutoff
+	RoomsCreatedToday  int
+	Participants       int
+	OnlineParticipants int
+}
+
+func (s *Store) Totals(ctx context.Context, onlineCutoffMs, startOfDayMs int64) (*Totals, error) {
+	var t Totals
+	err := s.db.QueryRowContext(ctx, `
+		SELECT
+			COUNT(*),
+			SUM(CASE WHEN last_active_at > ? THEN 1 ELSE 0 END),
+			SUM(CASE WHEN created_at      > ? THEN 1 ELSE 0 END)
+		FROM rooms
+	`, onlineCutoffMs, startOfDayMs).Scan(&t.Rooms, &nullableInt{&t.ActiveRooms}, &nullableInt{&t.RoomsCreatedToday})
+	if err != nil {
+		return nil, err
+	}
+	err = s.db.QueryRowContext(ctx, `
+		SELECT
+			COUNT(*),
+			SUM(CASE WHEN last_seen_at > ? THEN 1 ELSE 0 END)
+		FROM participants
+	`, onlineCutoffMs).Scan(&t.Participants, &nullableInt{&t.OnlineParticipants})
+	if err != nil {
+		return nil, err
+	}
+	return &t, nil
+}
+
+// nullableInt scans NULL → 0 (SUM over empty set returns NULL in SQLite).
+type nullableInt struct{ dst *int }
+
+func (n *nullableInt) Scan(v any) error {
+	switch x := v.(type) {
+	case nil:
+		*n.dst = 0
+	case int64:
+		*n.dst = int(x)
+	case []byte:
+		return (&sql.NullInt64{}).Scan(x)
+	default:
+		return nil
+	}
+	return nil
+}
+
 func boolToInt(b bool) int {
 	if b {
 		return 1

@@ -3,6 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: ebifly:latest
     container_name: pp-app
     ports:
       - "8080:8080"
@@ -12,6 +13,26 @@ services:
       # Comma-separated host patterns. Leave empty to accept any origin (dev).
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}
       - COOKIE_SECURE=${COOKIE_SECURE:-true}
+    restart: unless-stopped
+
+  # LAN-only admin dashboard. Deliberately bound to a port that is NOT
+  # registered in Cloudflare Tunnel ingress, so it is only reachable from
+  # within the home network. Reads/writes the same SQLite volume as `app`.
+  admin:
+    image: ebifly:latest
+    container_name: pp-admin
+    entrypoint: ["/app/admin"]
+    depends_on:
+      - app
+    ports:
+      - "8081:8081"
+    volumes:
+      - sqlite-data:/data
+    environment:
+      - ADDR=:8081
+      - DB_PATH=/data/planning-poker.db
+      - LOG_FORMAT=${LOG_FORMAT:-json}
+      - ADMIN_BASIC_AUTH=${ADMIN_BASIC_AUTH:-}
     restart: unless-stopped
 
 volumes:
