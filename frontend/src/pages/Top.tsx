@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { createRoom } from '../lib/api'
+import ThemeToggle from '../components/ThemeToggle'
 
 export default function Top() {
   const navigate = useNavigate()
@@ -29,7 +30,11 @@ export default function Top() {
 
   return (
     <div className="top">
-      <h1>🦐 Planning Poker 🦐</h1>
+      <ThemeToggle />
+      <h1 className="brand">
+        <span className="brand-main">🦐 ebifly 🦐</span>
+        <span className="brand-sub">Planning Poker</span>
+      </h1>
       <button className="primary" onClick={onCreate} disabled={busy}>
         ＋ 部屋を作る
       </button>

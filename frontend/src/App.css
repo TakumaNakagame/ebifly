@@ -2,6 +2,15 @@
   box-sizing: border-box;
 }
 
+/* ---- Theme tokens ------------------------------------------------------
+ * Resolution order (highest priority first):
+ *   1. <html data-theme="light"|"dark">   — explicit user choice
+ *   2. @media (prefers-color-scheme)       — system preference (when data-theme="auto" or unset)
+ *   3. :root defaults                      — dark (fallback)
+ *
+ * We set the dark palette on :root so browsers that don't support
+ * prefers-color-scheme still get a cohesive dark theme.
+ */
 :root {
   --bg: #0f1117;
   --panel: #171a24;
@@ -13,6 +22,56 @@
   --border: #2c3040;
   --good: #51cf66;
   --bad: #ff6b6b;
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #fafbfc;
+    --panel: #ffffff;
+    --panel-hover: #f1f3f5;
+    --accent: #ff922b;
+    --accent-strong: #e8590c;
+    --text: #212529;
+    --muted: #6c757d;
+    --border: #dee2e6;
+    --good: #2f9e44;
+    --bad: #e03131;
+    --shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    color-scheme: light;
+  }
+}
+
+/* Explicit user-selected themes override the system preference above. */
+html[data-theme="dark"] {
+  --bg: #0f1117;
+  --panel: #171a24;
+  --panel-hover: #1e2230;
+  --accent: #ffa94d;
+  --accent-strong: #ff922b;
+  --text: #e9ecef;
+  --muted: #868e96;
+  --border: #2c3040;
+  --good: #51cf66;
+  --bad: #ff6b6b;
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  color-scheme: dark;
+}
+
+html[data-theme="light"] {
+  --bg: #fafbfc;
+  --panel: #ffffff;
+  --panel-hover: #f1f3f5;
+  --accent: #ff922b;
+  --accent-strong: #e8590c;
+  --text: #212529;
+  --muted: #6c757d;
+  --border: #dee2e6;
+  --good: #2f9e44;
+  --bad: #e03131;
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  color-scheme: light;
 }
 
 html,
@@ -81,6 +140,21 @@ input {
 .top h1 {
   font-size: 32px;
   margin-bottom: 40px;
+}
+.top h1.brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.top .brand-main {
+  font-weight: 700;
+}
+.top .brand-sub {
+  font-size: 14px;
+  color: var(--muted);
+  letter-spacing: 2px;
+  font-weight: 400;
 }
 .top .primary {
   width: 100%;
@@ -412,6 +486,34 @@ input {
 .emoji-bar .fav-slot:active {
   transform: scale(0.9);
 }
+.emoji-bar .fav-slot.editing {
+  border-style: solid;
+  border-color: var(--accent);
+  animation: slot-pulse 1.2s ease-in-out infinite;
+}
+.emoji-bar .fav-slot.editing.empty {
+  color: var(--accent);
+}
+.emoji-bar .fav-slot.picking {
+  border-color: var(--accent-strong);
+  background: var(--accent);
+  color: #1a1a1a;
+  animation: none;
+}
+@keyframes slot-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(255, 169, 77, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(255, 169, 77, 0);
+  }
+}
+.emoji-bar .picker-button.active {
+  background: var(--accent);
+  color: #1a1a1a;
+  border-color: var(--accent-strong);
+  font-weight: 600;
+}
 .emoji-bar .picker-button {
   padding: 8px 12px;
 }
@@ -459,6 +561,45 @@ input {
   z-index: 200;
   top: 40px;
   left: 0;
+}
+
+/* theme toggle — inline pill (rendered inside page layout; floats on .top only) */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text);
+  cursor: pointer;
+  z-index: 400;
+  box-shadow: var(--shadow);
+  transition: background 120ms, border-color 120ms;
+}
+.top {
+  position: relative;
+}
+.top > .theme-toggle {
+  position: absolute;
+  top: -40px;
+  right: 0;
+}
+.theme-toggle:hover {
+  background: var(--panel-hover);
+  border-color: var(--accent);
+}
+.theme-toggle .theme-icon {
+  font-size: 15px;
+  line-height: 1;
+}
+.theme-toggle .theme-text {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
 }
 
 /* connection banner */

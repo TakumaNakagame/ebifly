@@ -70,13 +70,13 @@ export default function FlyingEmoji({ flights, onLand }: Props) {
             }}
             exit={{ opacity: 0, scale: 0.3 }}
             transition={{
-              duration: 1.1,
+              duration: 2.2,
               // Smooth parabola across many tiny linear segments.
               left: { times: a.times, ease: 'linear' },
               top: { times: a.times, ease: 'linear' },
               rotate: { times: a.times, ease: 'linear' },
               scale: { times: a.times, ease: 'linear' },
-              opacity: { times: [0, 0.1, 1], duration: 1.1 },
+              opacity: { times: [0, 0.05, 1], duration: 2.2 },
             }}
             onAnimationComplete={() => onLand(f)}
           >

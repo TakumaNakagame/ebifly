@@ -1,0 +1,27 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ebifly:latest
+    container_name: ebifly-app
+    volumes:
+      - sqlite-data:/data
+    environment:
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
+      - COOKIE_SECURE=true
+      - LOG_FORMAT=json
+    restart: unless-stopped
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: ebifly-cloudflared
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    restart: unless-stopped
+    depends_on:
+      - app
+
+volumes:
+  sqlite-data:

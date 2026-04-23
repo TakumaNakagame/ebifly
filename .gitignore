@@ -15,3 +15,6 @@ backend/*.db-wal
 .idea/
 .vscode/
 *.swp
+
+# terraform is a symlink to a separate repo (home-labo)
+terraform

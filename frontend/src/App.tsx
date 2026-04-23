@@ -3,6 +3,8 @@ import Top from './pages/Top'
 import Room from './pages/Room'
 import './App.css'
 
+// ThemeToggle is embedded per-page (inside Top's container and Room's header)
+// so it doesn't collide with the room's top-right action buttons.
 export default function App() {
   return (
     <BrowserRouter>

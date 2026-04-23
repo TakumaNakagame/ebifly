@@ -7,6 +7,7 @@ import RevealPanel from '../components/RevealPanel'
 import EmojiBar from '../components/EmojiBar'
 import FlyingEmoji, { type Flight } from '../components/FlyingEmoji'
 import Explosion, { type Burst } from '../components/Explosion'
+import ThemeToggle from '../components/ThemeToggle'
 import { joinRoom, checkRoom } from '../lib/api'
 import { getStoredName, setStoredName } from '../lib/storage'
 import { useRoom } from '../hooks/useRoom'
@@ -305,6 +306,7 @@ export default function Room() {
           </button>
         </div>
         <div className="user">
+          <ThemeToggle />
           {me && (
             <button className="name-edit" onClick={() => renameSelf(me.name, actions.setName)}>
               👤 {me.name} ✎

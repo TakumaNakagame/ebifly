@@ -13,8 +13,8 @@ const TARGET_ALL = '__all__'
 
 export default function EmojiBar({ participants, selfId, onThrow }: Props) {
   const [favs, setFavs] = useState<string[]>(() => getFavorites())
-  const [pickerOpen, setPickerOpen] = useState(false)
-  const [pickerMode, setPickerMode] = useState<'throw' | 'favorite'>('throw')
+  const [editing, setEditing] = useState(false)
+  const [editingSlot, setEditingSlot] = useState<number | null>(null)
   const [target, setTarget] = useState<string>(TARGET_ALL)
   const popupRef = useRef<HTMLDivElement>(null)
 
@@ -23,44 +23,48 @@ export default function EmojiBar({ participants, selfId, onThrow }: Props) {
   }, [favs])
 
   useEffect(() => {
+    if (editingSlot === null) return
     function onDocClick(e: MouseEvent) {
       if (popupRef.current && !popupRef.current.contains(e.target as Node)) {
-        setPickerOpen(false)
+        setEditingSlot(null)
       }
     }
-    if (pickerOpen) {
-      document.addEventListener('mousedown', onDocClick)
-      return () => document.removeEventListener('mousedown', onDocClick)
+    document.addEventListener('mousedown', onDocClick)
+    return () => document.removeEventListener('mousedown', onDocClick)
+  }, [editingSlot])
+
+  function toggleEdit() {
+    setEditing((prev) => {
+      if (prev) setEditingSlot(null)
+      return !prev
+    })
+  }
+
+  function onSlotClick(i: number, value: string | null) {
+    if (editing) {
+      setEditingSlot(i)
+    } else if (value) {
+      onThrow(value, target === TARGET_ALL ? undefined : target)
     }
-  }, [pickerOpen])
-
-  function throwIt(emoji: string) {
-    onThrow(emoji, target === TARGET_ALL ? undefined : target)
   }
 
-  function openFavoritePicker() {
-    setPickerMode('favorite')
-    setPickerOpen(true)
-  }
-  function openThrowPicker() {
-    setPickerMode('throw')
-    setPickerOpen(true)
-  }
-
-  function onPick(emoji: string) {
-    if (pickerMode === 'favorite') {
-      setFavs((cur) => {
-        if (cur.includes(emoji)) return cur
-        return [...cur, emoji].slice(0, 5)
-      })
-    } else {
-      throwIt(emoji)
-    }
-    setPickerOpen(false)
-  }
-
-  function removeFav(i: number) {
+  function onSlotRightClick(e: React.MouseEvent, i: number) {
+    e.preventDefault()
     setFavs((cur) => cur.filter((_, idx) => idx !== i))
+  }
+
+  function onPickEmoji(emoji: string) {
+    if (editingSlot === null) return
+    const i = editingSlot
+    setFavs((cur) => {
+      if (i < cur.length) {
+        const next = [...cur]
+        next[i] = emoji
+        return next
+      }
+      return [...cur, emoji].slice(0, 5)
+    })
+    setEditingSlot(null)
   }
 
   const slots: Array<string | null> = [...favs]
@@ -70,60 +74,75 @@ export default function EmojiBar({ participants, selfId, onThrow }: Props) {
     <div className="emoji-bar" style={{ position: 'relative' }}>
       <span style={{ fontSize: 13, color: 'var(--muted)' }}>⭐</span>
       <div className="favs">
-        {slots.map((e, i) =>
-          e ? (
+        {slots.map((e, i) => {
+          const classes = [
+            'fav-slot',
+            e ? '' : 'empty',
+            editing ? 'editing' : '',
+            editingSlot === i ? 'picking' : '',
+          ].filter(Boolean).join(' ')
+          const title = editing
+            ? 'クリックで絵文字を選択、右クリックで削除'
+            : e
+              ? 'クリックで投擲、右クリックで削除'
+              : 'プリセット編集モードで設定'
+          return (
             <div
               key={i}
-              className="fav-slot"
-              onClick={() => throwIt(e)}
-              onContextMenu={(ev) => {
-                ev.preventDefault()
-                removeFav(i)
-              }}
-              title="クリックで投擲、右クリックで削除"
+              className={classes}
+              onClick={() => onSlotClick(i, e)}
+              onContextMenu={(ev) => e && onSlotRightClick(ev, i)}
+              title={title}
             >
-              {e}
+              {e ?? (editing ? '?' : '＋')}
             </div>
-          ) : (
-            <div
-              key={i}
-              className="fav-slot empty"
-              onClick={openFavoritePicker}
-              title="お気に入りに追加"
-            >
-              ＋
-            </div>
-          ),
-        )}
+          )
+        })}
       </div>
-      <button
-        className="picker-button"
-        onClick={() => setFavs([...DEFAULT_FAVORITES])}
-        title="プリセットに戻す"
-      >
-        ↻ 初期化
-      </button>
-      <button className="picker-button" onClick={openThrowPicker}>
-        🎯 絵文字を投げる
-      </button>
-      <span className="target-select">投げ先:</span>
-      <select value={target} onChange={(e) => setTarget(e.target.value)}>
-        <option value={TARGET_ALL}>全員</option>
-        {participants
-          .filter((p) => p.id !== selfId)
-          .map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-      </select>
 
-      {pickerOpen && (
+      <button
+        className={`picker-button ${editing ? 'active' : ''}`}
+        onClick={toggleEdit}
+        title={editing ? 'プリセット編集を終了' : 'プリセット編集を開始'}
+      >
+        {editing ? '✓ 完了' : '⚙️ プリセット編集'}
+      </button>
+
+      {editing && (
+        <button
+          className="picker-button"
+          onClick={() => {
+            setFavs([...DEFAULT_FAVORITES])
+            setEditingSlot(null)
+          }}
+          title="プリセットに戻す"
+        >
+          ↻ 初期化
+        </button>
+      )}
+
+      {!editing && (
+        <>
+          <span className="target-select">投げ先:</span>
+          <select value={target} onChange={(e) => setTarget(e.target.value)}>
+            <option value={TARGET_ALL}>全員</option>
+            {participants
+              .filter((p) => p.id !== selfId)
+              .map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+          </select>
+        </>
+      )}
+
+      {editingSlot !== null && (
         <div ref={popupRef} className="picker-popup">
           <EmojiPicker
-            onEmojiClick={(data) => onPick(data.emoji)}
+            onEmojiClick={(data) => onPickEmoji(data.emoji)}
             emojiStyle={EmojiStyle.NATIVE}
-            theme={Theme.DARK}
+            theme={Theme.AUTO}
             height={350}
             width={320}
           />
