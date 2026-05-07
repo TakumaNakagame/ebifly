@@ -48,6 +48,7 @@ func (s *Server) Routes() http.Handler {
 	r.Get("/", s.dashboard)
 	r.Post("/rooms/{code}/delete", s.deleteRoom)
 	r.Post("/rooms/{code}/retention", s.setRoomRetention)
+	r.Post("/rooms/{code}/note", s.setRoomNote)
 	r.Post("/settings/retention", s.setRetention)
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		if err := s.Store.Ping(r.Context()); err != nil {
@@ -76,6 +77,7 @@ type roomView struct {
 	RetentionDays      int    // effective value (override or global default)
 	RetentionInherited bool   // true when no per-room override is set
 	RetentionInputVal  string // "" when inherited, otherwise the override as a decimal string
+	AdminNote          string // admin-only memo, "" if unset
 }
 
 type dashboardStats struct {
@@ -131,6 +133,10 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 			inputVal = fmt.Sprintf("%d", effective)
 			inherited = false
 		}
+		note := ""
+		if rm.AdminNote.Valid {
+			note = rm.AdminNote.String
+		}
 		views = append(views, roomView{
 			Code:               rm.Code,
 			Phase:              string(rm.Phase),
@@ -148,6 +154,7 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 			RetentionDays:      effective,
 			RetentionInherited: inherited,
 			RetentionInputVal:  inputVal,
+			AdminNote:          note,
 		})
 	}
 
@@ -229,6 +236,30 @@ func (s *Server) setRoomRetention(w http.ResponseWriter, r *http.Request) {
 		logDays = fmt.Sprintf("%d", *days)
 	}
 	slog.Info("admin set room retention", "code", code, "days", logDays)
+	http.Redirect(w, r, "/?flash="+url.QueryEscape(msg), http.StatusSeeOther)
+}
+
+func (s *Server) setRoomNote(w http.ResponseWriter, r *http.Request) {
+	code := chi.URLParam(r, "code")
+	if code == "" {
+		http.Error(w, "missing code", http.StatusBadRequest)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	note := strings.TrimSpace(r.PostForm.Get("note"))
+	if _, err := s.Store.SetRoomAdminNote(r.Context(), code, note); err != nil {
+		slog.Error("admin set room note", "err", err, "code", code)
+		http.Error(w, "failed", http.StatusInternalServerError)
+		return
+	}
+	msg := fmt.Sprintf("部屋 %s のメモを保存しました", code)
+	if note == "" {
+		msg = fmt.Sprintf("部屋 %s のメモを削除しました", code)
+	}
+	slog.Info("admin set room note", "code", code, "len", len(note))
 	http.Redirect(w, r, "/?flash="+url.QueryEscape(msg), http.StatusSeeOther)
 }
 

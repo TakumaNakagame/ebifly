@@ -33,6 +33,7 @@ func Open(path string) (*Store, error) {
 	// "duplicate column" error.
 	for _, alter := range []string{
 		`ALTER TABLE rooms ADD COLUMN retention_days INTEGER`,
+		`ALTER TABLE rooms ADD COLUMN admin_note TEXT`,
 	} {
 		if _, err := db.Exec(alter); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 			return nil, fmt.Errorf("migrate alter: %w", err)
@@ -332,6 +333,20 @@ func (s *Store) DeleteExpiredRooms(ctx context.Context, nowMs int64, defaultDays
 	return res.RowsAffected()
 }
 
+// SetRoomAdminNote saves an admin-only memo on a room. Empty string clears it.
+// Returns the number of rooms updated (0 if the code does not exist).
+func (s *Store) SetRoomAdminNote(ctx context.Context, code, note string) (int64, error) {
+	var v any
+	if note != "" {
+		v = note
+	}
+	res, err := s.db.ExecContext(ctx, `UPDATE rooms SET admin_note = ? WHERE code = ?`, v, code)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 // SetRoomRetentionDays sets a per-room retention override. Pass nil to clear
 // the override (the room then follows the global default again).
 func (s *Store) SetRoomRetentionDays(ctx context.Context, code string, days *int) (int64, error) {
@@ -369,7 +384,8 @@ type RoomSummary struct {
 	RoundNumber     int
 	CreatedAt       int64
 	LastActiveAt    int64
-	RetentionDays   sql.NullInt64 // NULL = inherit global default
+	RetentionDays   sql.NullInt64  // NULL = inherit global default
+	AdminNote       sql.NullString // admin-only memo
 	ParticipantCnt  int
 	OnlineIshCnt    int            // last_seen_at within a recent window
 	VotesThisRound  int
@@ -382,7 +398,7 @@ type RoomSummary struct {
 func (s *Store) ListRoomSummaries(ctx context.Context, onlineCutoffMs int64) ([]*RoomSummary, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT
-			r.id, r.code, r.topic, r.phase, r.round_number, r.created_at, r.last_active_at, r.retention_days,
+			r.id, r.code, r.topic, r.phase, r.round_number, r.created_at, r.last_active_at, r.retention_days, r.admin_note,
 			COUNT(DISTINCT p.id)                                                AS participant_cnt,
 			COUNT(DISTINCT CASE WHEN p.last_seen_at > ? THEN p.id END)          AS online_ish,
 			COUNT(DISTINCT CASE WHEN v.value IS NOT NULL AND v.is_spectating=0
@@ -404,7 +420,7 @@ func (s *Store) ListRoomSummaries(ctx context.Context, onlineCutoffMs int64) ([]
 		var r RoomSummary
 		if err := rows.Scan(
 			&r.ID, &r.Code, &r.Topic, &r.Phase, &r.RoundNumber,
-			&r.CreatedAt, &r.LastActiveAt, &r.RetentionDays,
+			&r.CreatedAt, &r.LastActiveAt, &r.RetentionDays, &r.AdminNote,
 			&r.ParticipantCnt, &r.OnlineIshCnt, &r.VotesThisRound, &r.SpectatorsRound,
 		); err != nil {
 			return nil, err

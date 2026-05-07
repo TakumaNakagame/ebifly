@@ -152,6 +152,60 @@
     }
     .retention-form button:hover { background: var(--panel-hover); }
     .retention-form button.reset { color: var(--muted); }
+
+    .note-form { margin: 0; }
+    .note-form details { display: inline-block; }
+    .note-form summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 2px 8px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-size: 12px;
+      color: var(--muted);
+      max-width: 220px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .note-form summary::-webkit-details-marker { display: none; }
+    .note-form summary.has-note {
+      color: var(--text);
+      background: var(--panel-hover);
+      border-color: var(--accent);
+    }
+    .note-form details[open] summary { background: var(--panel-hover); }
+    .note-form .note-edit {
+      margin-top: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 240px;
+    }
+    .note-form textarea {
+      width: 100%;
+      min-height: 70px;
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 8px;
+      font-family: inherit;
+      font-size: 12px;
+      resize: vertical;
+    }
+    .note-form .note-edit button {
+      align-self: flex-end;
+      background: var(--accent);
+      color: #1a1a1a;
+      border: 1px solid var(--accent-strong);
+      padding: 4px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .note-form .note-edit button:hover { background: var(--accent-strong); color: white; }
     .empty-state {
       background: var(--panel);
       border: 1px dashed var(--border);
@@ -344,6 +398,7 @@
           <th>作成</th>
           <th>最終アクティブ</th>
           <th>保存期間</th>
+          <th>メモ</th>
           <th></th>
         </tr>
       </thead>
@@ -365,6 +420,17 @@
               <span class="unit">日</span>
               <button type="submit" title="保存">💾</button>
               {{if not .RetentionInherited}}<button type="submit" name="days" value="" title="既定値に戻す" class="reset">↺</button>{{end}}
+            </form>
+          </td>
+          <td class="cell-note" data-label="メモ">
+            <form method="post" action="/rooms/{{.Code}}/note" class="note-form">
+              <details{{if .AdminNote}} open{{end}}>
+                <summary class="{{if .AdminNote}}has-note{{end}}" title="{{if .AdminNote}}{{.AdminNote}}{{else}}メモを追加{{end}}">{{if .AdminNote}}📝 {{.AdminNote}}{{else}}＋ メモ{{end}}</summary>
+                <div class="note-edit">
+                  <textarea name="note" placeholder="管理者メモ (利用者には表示されません)">{{.AdminNote}}</textarea>
+                  <button type="submit">💾 保存</button>
+                </div>
+              </details>
             </form>
           </td>
           <td class="cell-actions">

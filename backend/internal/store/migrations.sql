@@ -6,7 +6,8 @@ CREATE TABLE IF NOT EXISTS rooms (
     round_number    INTEGER NOT NULL DEFAULT 1,
     created_at      INTEGER NOT NULL,
     last_active_at  INTEGER NOT NULL,
-    retention_days  INTEGER  -- NULL = inherit the global default from settings
+    retention_days  INTEGER, -- NULL = inherit the global default from settings
+    admin_note      TEXT     -- admin-only memo, never sent to room participants
 );
 
 CREATE INDEX IF NOT EXISTS idx_rooms_last_active ON rooms(last_active_at);
