@@ -1,7 +1,7 @@
 package room
 
 var ValidCards = map[string]bool{
-	"0": true, "1": true, "2": true, "3": true, "5": true,
+	"0": true, "0.5": true, "1": true, "2": true, "3": true, "5": true,
 	"8": true, "13": true, "21": true, "?": true, "coffee": true,
 }
 
@@ -11,6 +11,8 @@ func NumericValue(card string) (float64, bool) {
 	switch card {
 	case "0":
 		return 0, true
+	case "0.5":
+		return 0.5, true
 	case "1":
 		return 1, true
 	case "2":

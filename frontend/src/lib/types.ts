@@ -1,7 +1,7 @@
 export type Phase = 'voting' | 'revealed'
 export type Mode = 'voter' | 'spectator'
 
-export const CARDS = ['0', '1', '2', '3', '5', '8', '13', '21', '?', 'coffee'] as const
+export const CARDS = ['0', '0.5', '1', '2', '3', '5', '8', '13', '21', '?', 'coffee'] as const
 export type Card = (typeof CARDS)[number]
 
 export interface RoomState {

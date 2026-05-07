@@ -11,6 +11,7 @@ interface Props {
 
 const LABEL: Record<Card, string> = {
   '0': '0',
+  '0.5': '½',
   '1': '1',
   '2': '2',
   '3': '3',

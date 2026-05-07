@@ -13,7 +13,7 @@ interface Props {
   pileRef?: (el: HTMLDivElement | null) => void
 }
 
-const CARD_LABEL: Record<string, string> = { coffee: '☕' }
+const CARD_LABEL: Record<string, string> = { coffee: '☕', '0.5': '½' }
 
 export default function ParticipantCard({
   p,

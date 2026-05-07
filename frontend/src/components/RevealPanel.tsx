@@ -2,8 +2,8 @@ import type { Stats } from '../lib/types'
 
 export default function RevealPanel({ stats, onNext }: { stats: Stats; onNext: () => void }) {
   const entries = Object.entries(stats.distribution ?? {}).sort((a, b) => {
-    const na = parseInt(a[0], 10)
-    const nb = parseInt(b[0], 10)
+    const na = parseFloat(a[0])
+    const nb = parseFloat(b[0])
     if (!isNaN(na) && !isNaN(nb)) return na - nb
     if (!isNaN(na)) return -1
     if (!isNaN(nb)) return 1
@@ -24,7 +24,7 @@ export default function RevealPanel({ stats, onNext }: { stats: Stats; onNext: (
         ) : (
           entries.map(([label, count]) => (
             <div className="dist-row" key={label}>
-              <span className="label">{label === 'coffee' ? '☕' : label}</span>
+              <span className="label">{label === 'coffee' ? '☕' : label === '0.5' ? '½' : label}</span>
               <span className="bar" style={{ width: `${(count / max) * 200}px` }} />
               <span className="count">{count} 人</span>
             </div>
