@@ -2,6 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ebifly / admin</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A6%90%3C/text%3E%3C/svg%3E">
   <meta http-equiv="refresh" content="15">
@@ -122,6 +123,35 @@
       color: white;
       border-color: var(--bad);
     }
+
+    .retention-form {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .retention-form input[type="number"] {
+      width: 56px;
+      padding: 3px 6px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+    }
+    .retention-form input[type="number"]::placeholder { color: var(--muted); opacity: 0.6; }
+    .retention-form .unit { color: var(--muted); font-size: 11px; }
+    .retention-form button {
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      padding: 2px 6px;
+      color: var(--text);
+    }
+    .retention-form button:hover { background: var(--panel-hover); }
+    .retention-form button.reset { color: var(--muted); }
     .empty-state {
       background: var(--panel);
       border: 1px dashed var(--border);
@@ -137,6 +167,118 @@
       border-radius: 6px;
       margin-bottom: 16px;
       font-size: 14px;
+    }
+
+    .settings {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px 20px;
+      margin-bottom: 32px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .settings .field { display: flex; align-items: center; gap: 10px; }
+    .settings label  { color: var(--muted); font-size: 13px; }
+    .settings input[type="number"] {
+      width: 80px;
+      padding: 6px 8px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 14px;
+      font-variant-numeric: tabular-nums;
+    }
+    .settings .unit { color: var(--muted); font-size: 13px; }
+    .settings button {
+      background: var(--accent);
+      color: #1a1a1a;
+      border: 1px solid var(--accent-strong);
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .settings button:hover { background: var(--accent-strong); color: white; }
+    .settings .hint { color: var(--muted); font-size: 12px; }
+
+    /* ---------- Mobile (< 768px): reflow table as cards ---------- */
+    @media (max-width: 768px) {
+      header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+        padding: 16px 20px;
+      }
+      header .refresh { font-size: 11px; }
+      main { padding: 16px; }
+
+      .totals {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+        margin-bottom: 20px;
+      }
+      .tile { padding: 12px; }
+      .tile .value { font-size: 22px; }
+      .tile .label { font-size: 10px; }
+      .tile .sub { font-size: 11px; }
+
+      table.rooms { border: none; background: transparent; }
+      table.rooms thead { display: none; }
+      table.rooms tbody { display: grid; gap: 12px; }
+      table.rooms tr {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 4px 10px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 12px 14px;
+      }
+      table.rooms td {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        padding: 2px 0;
+        border: none;
+        font-size: 13px;
+      }
+      table.rooms td::before {
+        content: attr(data-label);
+        color: var(--muted);
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        min-width: 60px;
+      }
+      /* Code cell takes the whole top strip, no label */
+      table.rooms td.cell-code {
+        grid-column: 1 / -1;
+        font-size: 16px;
+      }
+      table.rooms td.cell-code::before { content: none; }
+      /* Phase badge shares top strip with code, right aligned */
+      table.rooms td.cell-phase {
+        grid-column: 1 / -1;
+        margin-top: -4px;
+      }
+      table.rooms td.cell-phase::before {
+        content: "PHASE";
+      }
+      /* Delete button stretches full width at the bottom */
+      table.rooms td.cell-actions {
+        grid-column: 1 / -1;
+        margin-top: 6px;
+      }
+      table.rooms td.cell-actions::before { content: none; }
+      .delete-form { width: 100%; }
+      .delete-form button { width: 100%; padding: 8px; font-size: 13px; }
+
+      .topic { max-width: none; white-space: normal; }
     }
   </style>
 </head>
@@ -177,6 +319,17 @@
       </div>
     </div>
 
+    <div class="section-title">設定</div>
+    <form method="post" action="/settings/retention" class="settings">
+      <div class="field">
+        <label for="retention-days">部屋の保存期間</label>
+        <input id="retention-days" type="number" name="days" min="{{.RetentionMin}}" max="{{.RetentionMax}}" step="1" value="{{.RetentionDays}}" required>
+        <span class="unit">日</span>
+      </div>
+      <button type="submit">💾 保存</button>
+      <span class="hint">最終アクティブから {{.RetentionDays}} 日経過した部屋は自動削除されます ({{.RetentionMin}}〜{{.RetentionMax}} 日)</span>
+    </form>
+
     <div class="section-title">部屋一覧 ({{len .Rooms}})</div>
     {{if .Rooms}}
     <table class="rooms">
@@ -190,21 +343,31 @@
           <th>投票</th>
           <th>作成</th>
           <th>最終アクティブ</th>
+          <th>保存期間</th>
           <th></th>
         </tr>
       </thead>
       <tbody>
+        {{$min := .RetentionMin}}{{$max := .RetentionMax}}
         {{range .Rooms}}
         <tr>
-          <td><code class="code">{{.Code}}</code></td>
-          <td class="topic {{if not .TopicDisplay}}empty{{end}}">{{if .TopicDisplay}}{{.TopicDisplay}}{{else}}(未設定){{end}}</td>
-          <td class="phase-{{.Phase}}">{{.Phase}}</td>
-          <td class="nums">R{{.RoundNumber}}</td>
-          <td class="nums"><span class="strong">{{.OnlineIshCnt}}</span>/{{.ParticipantCnt}}</td>
-          <td class="nums">{{.VotesThisRound}}{{if .SpectatorsRound}} <span style="color: var(--muted);">+👀{{.SpectatorsRound}}</span>{{end}}</td>
-          <td class="rel stale" title="{{.CreatedAtDisplay}}">{{.CreatedRel}}</td>
-          <td class="rel {{.LastActiveClass}}" title="{{.LastActiveDisplay}}">{{.LastActiveRel}}</td>
-          <td>
+          <td class="cell-code" data-label="CODE"><code class="code">{{.Code}}</code></td>
+          <td class="topic {{if not .TopicDisplay}}empty{{end}}" data-label="お題">{{if .TopicDisplay}}{{.TopicDisplay}}{{else}}(未設定){{end}}</td>
+          <td class="cell-phase phase-{{.Phase}}" data-label="PHASE">{{.Phase}}</td>
+          <td class="nums" data-label="ROUND">R{{.RoundNumber}}</td>
+          <td class="nums" data-label="参加"><span class="strong">{{.OnlineIshCnt}}</span>/{{.ParticipantCnt}}</td>
+          <td class="nums" data-label="投票">{{.VotesThisRound}}{{if .SpectatorsRound}} <span style="color: var(--muted);">+👀{{.SpectatorsRound}}</span>{{end}}</td>
+          <td class="rel stale" title="{{.CreatedAtDisplay}}" data-label="作成">{{.CreatedRel}}</td>
+          <td class="rel {{.LastActiveClass}}" title="{{.LastActiveDisplay}}" data-label="最終">{{.LastActiveRel}}</td>
+          <td class="cell-retention" data-label="保存期間">
+            <form method="post" action="/rooms/{{.Code}}/retention" class="retention-form">
+              <input type="number" name="days" min="{{$min}}" max="{{$max}}" step="1" value="{{.RetentionInputVal}}" placeholder="{{.RetentionDays}}" title="{{if .RetentionInherited}}既定値 ({{.RetentionDays}} 日) を継承中{{else}}個別設定: {{.RetentionDays}} 日{{end}}">
+              <span class="unit">日</span>
+              <button type="submit" title="保存">💾</button>
+              {{if not .RetentionInherited}}<button type="submit" name="days" value="" title="既定値に戻す" class="reset">↺</button>{{end}}
+            </form>
+          </td>
+          <td class="cell-actions">
             <form method="post" action="/rooms/{{.Code}}/delete" class="delete-form" onsubmit="return confirm('部屋 {{.Code}} を削除しますか？ 参加者全員が接続断となります。');">
               <button type="submit">🗑️ 削除</button>
             </form>

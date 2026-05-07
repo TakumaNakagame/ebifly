@@ -5,7 +5,8 @@ CREATE TABLE IF NOT EXISTS rooms (
     phase           TEXT NOT NULL DEFAULT 'voting',
     round_number    INTEGER NOT NULL DEFAULT 1,
     created_at      INTEGER NOT NULL,
-    last_active_at  INTEGER NOT NULL
+    last_active_at  INTEGER NOT NULL,
+    retention_days  INTEGER  -- NULL = inherit the global default from settings
 );
 
 CREATE INDEX IF NOT EXISTS idx_rooms_last_active ON rooms(last_active_at);
@@ -31,3 +32,10 @@ CREATE TABLE IF NOT EXISTS votes (
 );
 
 CREATE INDEX IF NOT EXISTS idx_votes_room ON votes(room_id);
+
+CREATE TABLE IF NOT EXISTS settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
+INSERT OR IGNORE INTO settings(key, value) VALUES ('retention_days', '7');

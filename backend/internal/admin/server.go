@@ -12,6 +12,7 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -46,6 +47,8 @@ func (s *Server) Routes() http.Handler {
 	}
 	r.Get("/", s.dashboard)
 	r.Post("/rooms/{code}/delete", s.deleteRoom)
+	r.Post("/rooms/{code}/retention", s.setRoomRetention)
+	r.Post("/settings/retention", s.setRetention)
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		if err := s.Store.Ping(r.Context()); err != nil {
 			http.Error(w, "db unavailable", http.StatusServiceUnavailable)
@@ -57,19 +60,22 @@ func (s *Server) Routes() http.Handler {
 }
 
 type roomView struct {
-	Code              string
-	Phase             string
-	RoundNumber       int
-	TopicDisplay      string
-	ParticipantCnt    int
-	OnlineIshCnt      int
-	VotesThisRound    int
-	SpectatorsRound   int
-	CreatedAtDisplay  string
-	CreatedRel        string
-	LastActiveDisplay string
-	LastActiveRel     string
-	LastActiveClass   string
+	Code               string
+	Phase              string
+	RoundNumber        int
+	TopicDisplay       string
+	ParticipantCnt     int
+	OnlineIshCnt       int
+	VotesThisRound     int
+	SpectatorsRound    int
+	CreatedAtDisplay   string
+	CreatedRel         string
+	LastActiveDisplay  string
+	LastActiveRel      string
+	LastActiveClass    string
+	RetentionDays      int    // effective value (override or global default)
+	RetentionInherited bool   // true when no per-room override is set
+	RetentionInputVal  string // "" when inherited, otherwise the override as a decimal string
 }
 
 type dashboardStats struct {
@@ -77,11 +83,14 @@ type dashboardStats struct {
 }
 
 type indexData struct {
-	Now    string
-	Flash  string
-	Totals *store.Totals
-	Stats  dashboardStats
-	Rooms  []roomView
+	Now           string
+	Flash         string
+	Totals        *store.Totals
+	Stats         dashboardStats
+	Rooms         []roomView
+	RetentionDays int
+	RetentionMin  int
+	RetentionMax  int
 }
 
 func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
@@ -102,26 +111,43 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to load rooms", http.StatusInternalServerError)
 		return
 	}
+	retention, err := s.Store.GetRetentionDays(ctx)
+	if err != nil {
+		slog.Error("admin get retention", "err", err)
+		retention = store.DefaultRetentionDays
+	}
+
 	views := make([]roomView, 0, len(rooms))
 	for _, rm := range rooms {
 		topic := ""
 		if rm.Topic.Valid {
 			topic = rm.Topic.String
 		}
+		effective := retention
+		inputVal := ""
+		inherited := true
+		if rm.RetentionDays.Valid {
+			effective = int(rm.RetentionDays.Int64)
+			inputVal = fmt.Sprintf("%d", effective)
+			inherited = false
+		}
 		views = append(views, roomView{
-			Code:              rm.Code,
-			Phase:             string(rm.Phase),
-			RoundNumber:       rm.RoundNumber,
-			TopicDisplay:      topic,
-			ParticipantCnt:    rm.ParticipantCnt,
-			OnlineIshCnt:      rm.OnlineIshCnt,
-			VotesThisRound:    rm.VotesThisRound,
-			SpectatorsRound:   rm.SpectatorsRound,
-			CreatedAtDisplay:  time.UnixMilli(rm.CreatedAt).Format("2006-01-02 15:04:05"),
-			CreatedRel:        relative(now, time.UnixMilli(rm.CreatedAt)),
-			LastActiveDisplay: time.UnixMilli(rm.LastActiveAt).Format("2006-01-02 15:04:05"),
-			LastActiveRel:     relative(now, time.UnixMilli(rm.LastActiveAt)),
-			LastActiveClass:   relativeClass(now, time.UnixMilli(rm.LastActiveAt)),
+			Code:               rm.Code,
+			Phase:              string(rm.Phase),
+			RoundNumber:        rm.RoundNumber,
+			TopicDisplay:       topic,
+			ParticipantCnt:     rm.ParticipantCnt,
+			OnlineIshCnt:       rm.OnlineIshCnt,
+			VotesThisRound:     rm.VotesThisRound,
+			SpectatorsRound:    rm.SpectatorsRound,
+			CreatedAtDisplay:   time.UnixMilli(rm.CreatedAt).Format("2006-01-02 15:04:05"),
+			CreatedRel:         relative(now, time.UnixMilli(rm.CreatedAt)),
+			LastActiveDisplay:  time.UnixMilli(rm.LastActiveAt).Format("2006-01-02 15:04:05"),
+			LastActiveRel:      relative(now, time.UnixMilli(rm.LastActiveAt)),
+			LastActiveClass:    relativeClass(now, time.UnixMilli(rm.LastActiveAt)),
+			RetentionDays:      effective,
+			RetentionInherited: inherited,
+			RetentionInputVal:  inputVal,
 		})
 	}
 
@@ -131,17 +157,79 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := indexData{
-		Now:    now.Format("2006-01-02 15:04:05"),
-		Flash:  r.URL.Query().Get("flash"),
-		Totals: totals,
-		Stats:  dashboardStats{AvgParticipants: avg},
-		Rooms:  views,
+		Now:           now.Format("2006-01-02 15:04:05"),
+		Flash:         r.URL.Query().Get("flash"),
+		Totals:        totals,
+		Stats:         dashboardStats{AvgParticipants: avg},
+		Rooms:         views,
+		RetentionDays: retention,
+		RetentionMin:  store.MinRetentionDays,
+		RetentionMax:  store.MaxRetentionDays,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := indexTmpl.Execute(w, data); err != nil {
 		slog.Error("admin render", "err", err)
 	}
+}
+
+func (s *Server) setRetention(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	raw := strings.TrimSpace(r.PostForm.Get("days"))
+	var days int
+	if _, err := fmt.Sscanf(raw, "%d", &days); err != nil {
+		http.Redirect(w, r, "/?flash="+url.QueryEscape("数値で指定してください"), http.StatusSeeOther)
+		return
+	}
+	if err := s.Store.SetRetentionDays(r.Context(), days); err != nil {
+		slog.Warn("admin set retention", "err", err, "days", days)
+		http.Redirect(w, r, "/?flash="+url.QueryEscape(fmt.Sprintf("保存期間は %d〜%d 日で指定してください", store.MinRetentionDays, store.MaxRetentionDays)), http.StatusSeeOther)
+		return
+	}
+	slog.Info("admin set retention", "days", days)
+	http.Redirect(w, r, "/?flash="+url.QueryEscape(fmt.Sprintf("保存期間を %d 日に変更しました", days)), http.StatusSeeOther)
+}
+
+func (s *Server) setRoomRetention(w http.ResponseWriter, r *http.Request) {
+	code := chi.URLParam(r, "code")
+	if code == "" {
+		http.Error(w, "missing code", http.StatusBadRequest)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	raw := strings.TrimSpace(r.PostForm.Get("days"))
+	var days *int
+	if raw != "" {
+		var n int
+		if _, err := fmt.Sscanf(raw, "%d", &n); err != nil {
+			http.Redirect(w, r, "/?flash="+url.QueryEscape("数値で指定してください"), http.StatusSeeOther)
+			return
+		}
+		days = &n
+	}
+	if _, err := s.Store.SetRoomRetentionDays(r.Context(), code, days); err != nil {
+		slog.Warn("admin set room retention", "err", err, "code", code)
+		http.Redirect(w, r, "/?flash="+url.QueryEscape(fmt.Sprintf("保存期間は %d〜%d 日で指定してください", store.MinRetentionDays, store.MaxRetentionDays)), http.StatusSeeOther)
+		return
+	}
+	var msg string
+	if days == nil {
+		msg = fmt.Sprintf("部屋 %s の保存期間を既定値に戻しました", code)
+	} else {
+		msg = fmt.Sprintf("部屋 %s の保存期間を %d 日に設定しました", code, *days)
+	}
+	logDays := "default"
+	if days != nil {
+		logDays = fmt.Sprintf("%d", *days)
+	}
+	slog.Info("admin set room retention", "code", code, "days", logDays)
+	http.Redirect(w, r, "/?flash="+url.QueryEscape(msg), http.StatusSeeOther)
 }
 
 func (s *Server) deleteRoom(w http.ResponseWriter, r *http.Request) {

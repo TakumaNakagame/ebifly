@@ -6,6 +6,7 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -26,6 +27,16 @@ func Open(path string) (*Store, error) {
 	db.SetMaxOpenConns(1)
 	if _, err := db.Exec(migrationsSQL); err != nil {
 		return nil, fmt.Errorf("migrate: %w", err)
+	}
+	// Idempotent column-adds for DBs that pre-date a column. SQLite has no
+	// `ADD COLUMN IF NOT EXISTS`, so we run each ALTER and swallow the
+	// "duplicate column" error.
+	for _, alter := range []string{
+		`ALTER TABLE rooms ADD COLUMN retention_days INTEGER`,
+	} {
+		if _, err := db.Exec(alter); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+			return nil, fmt.Errorf("migrate alter: %w", err)
+		}
 	}
 	return &Store{db: db}, nil
 }
@@ -268,10 +279,70 @@ func (s *Store) ListVotes(ctx context.Context, roomID string) ([]*Vote, error) {
 	return out, rows.Err()
 }
 
+// ---- Settings ----
+
+const (
+	DefaultRetentionDays = 7
+	MinRetentionDays     = 1
+	MaxRetentionDays     = 365
+)
+
+// GetRetentionDays returns the configured retention window in days. Falls back
+// to DefaultRetentionDays when the setting is missing or unparseable.
+func (s *Store) GetRetentionDays(ctx context.Context) (int, error) {
+	var v string
+	err := s.db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'retention_days'`).Scan(&v)
+	if errors.Is(err, sql.ErrNoRows) {
+		return DefaultRetentionDays, nil
+	}
+	if err != nil {
+		return DefaultRetentionDays, err
+	}
+	var n int
+	if _, err := fmt.Sscanf(v, "%d", &n); err != nil || n < MinRetentionDays || n > MaxRetentionDays {
+		return DefaultRetentionDays, nil
+	}
+	return n, nil
+}
+
+// SetRetentionDays validates and persists the retention window.
+func (s *Store) SetRetentionDays(ctx context.Context, days int) error {
+	if days < MinRetentionDays || days > MaxRetentionDays {
+		return fmt.Errorf("retention_days out of range (%d-%d)", MinRetentionDays, MaxRetentionDays)
+	}
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO settings(key, value) VALUES('retention_days', ?)
+		 ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+		fmt.Sprintf("%d", days))
+	return err
+}
+
 // ---- TTL cleanup ----
 
-func (s *Store) DeleteExpiredRooms(ctx context.Context, cutoffMs int64) (int64, error) {
-	res, err := s.db.ExecContext(ctx, `DELETE FROM rooms WHERE last_active_at < ?`, cutoffMs)
+// DeleteExpiredRooms removes rooms whose effective retention window has elapsed.
+// Per-room `retention_days` (when not NULL) overrides the global default.
+func (s *Store) DeleteExpiredRooms(ctx context.Context, nowMs int64, defaultDays int) (int64, error) {
+	res, err := s.db.ExecContext(ctx,
+		`DELETE FROM rooms
+		 WHERE last_active_at + COALESCE(retention_days, ?) * 86400000 < ?`,
+		defaultDays, nowMs)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
+// SetRoomRetentionDays sets a per-room retention override. Pass nil to clear
+// the override (the room then follows the global default again).
+func (s *Store) SetRoomRetentionDays(ctx context.Context, code string, days *int) (int64, error) {
+	if days != nil && (*days < MinRetentionDays || *days > MaxRetentionDays) {
+		return 0, fmt.Errorf("retention_days out of range (%d-%d)", MinRetentionDays, MaxRetentionDays)
+	}
+	var v any
+	if days != nil {
+		v = *days
+	}
+	res, err := s.db.ExecContext(ctx, `UPDATE rooms SET retention_days = ? WHERE code = ?`, v, code)
 	if err != nil {
 		return 0, err
 	}
@@ -298,8 +369,9 @@ type RoomSummary struct {
 	RoundNumber     int
 	CreatedAt       int64
 	LastActiveAt    int64
+	RetentionDays   sql.NullInt64 // NULL = inherit global default
 	ParticipantCnt  int
-	OnlineIshCnt    int // last_seen_at within a recent window
+	OnlineIshCnt    int            // last_seen_at within a recent window
 	VotesThisRound  int
 	SpectatorsRound int
 }
@@ -310,7 +382,7 @@ type RoomSummary struct {
 func (s *Store) ListRoomSummaries(ctx context.Context, onlineCutoffMs int64) ([]*RoomSummary, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT
-			r.id, r.code, r.topic, r.phase, r.round_number, r.created_at, r.last_active_at,
+			r.id, r.code, r.topic, r.phase, r.round_number, r.created_at, r.last_active_at, r.retention_days,
 			COUNT(DISTINCT p.id)                                                AS participant_cnt,
 			COUNT(DISTINCT CASE WHEN p.last_seen_at > ? THEN p.id END)          AS online_ish,
 			COUNT(DISTINCT CASE WHEN v.value IS NOT NULL AND v.is_spectating=0
@@ -332,7 +404,7 @@ func (s *Store) ListRoomSummaries(ctx context.Context, onlineCutoffMs int64) ([]
 		var r RoomSummary
 		if err := rows.Scan(
 			&r.ID, &r.Code, &r.Topic, &r.Phase, &r.RoundNumber,
-			&r.CreatedAt, &r.LastActiveAt,
+			&r.CreatedAt, &r.LastActiveAt, &r.RetentionDays,
 			&r.ParticipantCnt, &r.OnlineIshCnt, &r.VotesThisRound, &r.SpectatorsRound,
 		); err != nil {
 			return nil, err
