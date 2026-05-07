@@ -419,6 +419,13 @@ input {
 .reveal-panel .stat {
   margin-bottom: 20px;
 }
+.reveal-panel .stat-row {
+  display: flex;
+  gap: 32px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.reveal-panel .stat-row .stat { margin-bottom: 0; }
 .reveal-panel .avg {
   font-size: 42px;
   font-weight: 700;

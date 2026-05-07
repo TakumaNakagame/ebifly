@@ -10,12 +10,19 @@ export default function RevealPanel({ stats, onNext }: { stats: Stats; onNext: (
     return a[0].localeCompare(b[0])
   })
   const max = entries.reduce((m, [, c]) => Math.max(m, c), 0) || 1
+  const modeLabel = formatMode(entries, max)
   return (
     <div className="reveal-panel">
       <h3>📊 集計</h3>
-      <div className="stat">
-        <div className="muted">平均値</div>
-        <div className="avg">{stats.average !== null ? stats.average.toFixed(2) : '—'}</div>
+      <div className="stat-row">
+        <div className="stat">
+          <div className="muted">多数決</div>
+          <div className="avg">{modeLabel}</div>
+        </div>
+        <div className="stat">
+          <div className="muted">平均値</div>
+          <div className="avg">{stats.average !== null ? stats.average.toFixed(2) : '—'}</div>
+        </div>
       </div>
       <div className="stat">
         <div className="muted">分布</div>
@@ -36,4 +43,12 @@ export default function RevealPanel({ stats, onNext }: { stats: Stats; onNext: (
       </div>
     </div>
   )
+}
+
+function formatMode(entries: [string, number][], max: number): string {
+  if (entries.length === 0 || max === 0) return '—'
+  return entries
+    .filter(([, c]) => c === max)
+    .map(([label]) => (label === 'coffee' ? '☕' : label === '0.5' ? '½' : label))
+    .join(', ')
 }
