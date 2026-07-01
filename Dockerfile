@@ -22,7 +22,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/server ./cmd/serv
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/admin  ./cmd/admin
 
 # --- Stage 3: minimal runtime ---
-FROM alpine:3.20
+FROM alpine:3.24
 RUN apk add --no-cache ca-certificates tzdata
 WORKDIR /app
 COPY --from=backend /out/server /app/server
