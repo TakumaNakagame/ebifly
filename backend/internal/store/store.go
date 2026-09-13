@@ -387,7 +387,7 @@ type RoomSummary struct {
 	RetentionDays   sql.NullInt64  // NULL = inherit global default
 	AdminNote       sql.NullString // admin-only memo
 	ParticipantCnt  int
-	OnlineIshCnt    int            // last_seen_at within a recent window
+	OnlineIshCnt    int // last_seen_at within a recent window
 	VotesThisRound  int
 	SpectatorsRound int
 }
