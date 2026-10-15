@@ -18,9 +18,14 @@ import (
 	"github.com/takuma/planning-poker/backend/internal/hub"
 	"github.com/takuma/planning-poker/backend/internal/room"
 	"github.com/takuma/planning-poker/backend/internal/store"
+	"github.com/takuma/planning-poker/backend/internal/telemetry"
 	"github.com/takuma/planning-poker/backend/internal/ttl"
 	"github.com/takuma/planning-poker/backend/webassets"
 )
+
+// version is stamped at build time (-ldflags "-X main.version=...") and
+// reported as the service.version trace resource attribute.
+var version = ""
 
 func envOr(key, def string) string {
 	if v := os.Getenv(key); v != "" {
@@ -43,14 +48,18 @@ func requestLogger(next http.Handler) http.Handler {
 		start := time.Now()
 		ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 		next.ServeHTTP(ww, r)
-		slog.Info("http",
+		attrs := []any{
 			"method", r.Method,
 			"path", r.URL.Path,
 			"status", ww.Status(),
 			"bytes", ww.BytesWritten(),
 			"remote", r.RemoteAddr,
 			"duration_ms", time.Since(start).Milliseconds(),
-		)
+		}
+		if id := telemetry.TraceID(r.Context()); id != "" {
+			attrs = append(attrs, "trace_id", id)
+		}
+		slog.Info("http", attrs...)
 	})
 }
 
@@ -87,6 +96,12 @@ func main() {
 		}
 	}
 
+	shutdownTracing, err := telemetry.Setup(context.Background(), "ebifly", version)
+	if err != nil {
+		// Tracing is optional: keep serving without it.
+		slog.Error("tracing setup", "err", err)
+	}
+
 	s, err := store.Open(*dbPath)
 	if err != nil {
 		slog.Error("store open", "err", err)
@@ -99,6 +114,7 @@ func main() {
 	srv := &api.Server{Hub: h, AllowedOrigins: allowedOrigins, CookieSecure: *cookieSecure}
 
 	r := chi.NewRouter()
+	r.Use(telemetry.ChiRouteName)
 	r.Use(requestLogger)
 	r.Use(middleware.Recoverer)
 	srv.Routes(r)
@@ -111,7 +127,7 @@ func main() {
 
 	httpSrv := &http.Server{
 		Addr:         *addr,
-		Handler:      r,
+		Handler:      telemetry.HTTPHandler(r, traceRequest),
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 0, // 0 because we hold WS open
 		IdleTimeout:  120 * time.Second,
@@ -137,4 +153,16 @@ func main() {
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdownCancel()
 	_ = httpSrv.Shutdown(shutdownCtx)
+	cancel() // stop the TTL sweeper before flushing its last span
+	if err := shutdownTracing(shutdownCtx); err != nil {
+		slog.Error("tracing shutdown", "err", err)
+	}
+}
+
+// traceRequest decides which requests get an HTTP server span: only the REST
+// API. Static SPA assets and /healthz (kubelet probes) are skipped, and so is
+// the WebSocket endpoint, whose request lives as long as the connection —
+// handleWS traces the handshake and each message itself instead.
+func traceRequest(r *http.Request) bool {
+	return strings.HasPrefix(r.URL.Path, "/api/")
 }

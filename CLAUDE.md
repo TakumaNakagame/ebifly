@@ -52,6 +52,12 @@ Two-tier: Go backend (chi + coder/websocket + modernc.org/sqlite pure-Go driver)
 - **Message size / input caps** are enforced in `api/ws.go` (`SetReadLimit(16 KiB)`, plus per-field `truncate` for name/topic and byte caps for emoji/participant IDs). Keep these in sync if adding new message fields.
 - **Origin policy**: if `ALLOWED_ORIGINS` is empty, the WS handler accepts any origin (`InsecureSkipVerify`) — fine for dev, must be set in prod.
 
+### Tracing (OpenTelemetry)
+
+- `internal/telemetry/` sets up tracing **only when** `OTEL_EXPORTER_OTLP_ENDPOINT` or `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` is set (OTLP/HTTP); otherwise nothing changes. `OTEL_SERVICE_NAME` overrides the default service name (`ebifly` for the server, `ebifly-admin` for the admin binary), `OTEL_TRACES_SAMPLER` picks the sampler (default parentbased_always_on).
+- Spans: REST API via otelhttp named `METHOD <chi route pattern>` (`telemetry.ChiRouteName`); `/healthz`, static SPA files and `/ws/` are not wrapped. `handleWS` makes a `WS /ws/{code} handshake` span, then one new-root span per client message (`WS vote`, `WS reveal`, …; `ping` / `throwEmoji` are skipped) linked to the handshake. SQL goes through `XSAM/otelsql`, which only records queries that already have a parent span. The TTL sweeper emits `ttl.sweep`.
+- Never put a raw path / room code into a span name; use the route pattern.
+
 ### Frontend layout (`frontend/src/`)
 
 - `pages/Top.tsx` — room create / join entry.
@@ -64,5 +70,5 @@ Two-tier: Go backend (chi + coder/websocket + modernc.org/sqlite pure-Go driver)
 
 - If you change the Go protocol envelope or add a client message type, update all three: `backend/internal/hub/hub.go` (`Envelope`), `backend/internal/api/ws.go` (`wsMsg` + `dispatch`), and `frontend/src/lib/types.ts` + `useRoom.applyMessage`.
 - SQLite connection pool is pinned to `MaxOpenConns(1)` — don't try to parallelize writes; serialization is intentional for WAL + the app's low write rate.
-- `go.mod` requires Go 1.25. `modernc.org/sqlite` is pure Go, so `CGO_ENABLED=0` works and the prod image is an `alpine:3.20` scratch-ish runtime.
+- `go.mod` requires Go 1.26 (the OpenTelemetry modules need it). `modernc.org/sqlite` is pure Go, so `CGO_ENABLED=0` works and the prod image is an `alpine:3.20` scratch-ish runtime.
 - `task.md` (Japanese) holds the canonical product spec and acceptance criteria — consult it when changing game rules (auto-reveal, spectator mode, round reset semantics).

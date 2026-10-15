@@ -19,6 +19,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/takuma/planning-poker/backend/internal/store"
+	"github.com/takuma/planning-poker/backend/internal/telemetry"
 )
 
 //go:embed templates/index.html
@@ -39,6 +40,7 @@ type Server struct {
 
 func (s *Server) Routes() http.Handler {
 	r := chi.NewRouter()
+	r.Use(telemetry.ChiRouteName)
 	if s.BasicAuth != "" {
 		user, pass, ok := strings.Cut(s.BasicAuth, ":")
 		if ok {
@@ -336,8 +338,11 @@ func basicAuthMiddleware(user, pass, realm string) func(http.Handler) http.Handl
 // Run starts the admin HTTP listener and blocks until ctx is cancelled.
 func (s *Server) Run(ctx context.Context, addr string) error {
 	srv := &http.Server{
-		Addr:         addr,
-		Handler:      s.Routes(),
+		Addr: addr,
+		// Every admin page is traced except the health check.
+		Handler: telemetry.HTTPHandler(s.Routes(), func(r *http.Request) bool {
+			return r.URL.Path != "/healthz"
+		}),
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 30 * time.Second,
 	}

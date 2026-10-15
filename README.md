@@ -88,7 +88,7 @@ LOG_FORMAT=json \
 
 | レイヤー | 採用 |
 |--------|------|
-| Backend | Go 1.25 / chi / coder/websocket / modernc.org/sqlite (Pure Go) |
+| Backend | Go 1.26 / chi / coder/websocket / modernc.org/sqlite (Pure Go) |
 | Frontend | React 19 / Vite / TypeScript / framer-motion / emoji-picker-react |
 | Runtime | SQLite（1 週間 TTL で自動削除） |
 | Packaging | Multi-stage Dockerfile（SPA を `//go:embed` で同梱） |
