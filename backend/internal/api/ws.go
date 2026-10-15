@@ -11,9 +11,20 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/go-chi/chi/v5"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/takuma/planning-poker/backend/internal/store"
+	"github.com/takuma/planning-poker/backend/internal/telemetry"
 )
+
+// untracedWSTypes are client messages that never get a span: pings are
+// keep-alives, and emoji throws are a high-frequency toy (rate limited to
+// 5/s per participant) that would drown the interesting traces.
+var untracedWSTypes = map[string]bool{"ping": true, "throwEmoji": true}
 
 type wsMsg struct {
 	Type                string `json:"type"`
@@ -29,13 +40,48 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	code := chi.URLParam(r, "code")
 	ctx := r.Context()
 
-	rm, err := s.Hub.Store.GetRoomByCode(ctx, code)
+	// The HTTP request behind a WebSocket lives as long as the connection, so
+	// it is excluded from otelhttp. Instead the handshake (lookup, auth,
+	// upgrade, initial state) gets its own short span, continuing any
+	// incoming traceparent, and every client message below starts a new
+	// trace linked back to it.
+	tracer := telemetry.Tracer()
+	hsCtx, hsSpan := tracer.Start(
+		otel.GetTextMapPropagator().Extract(ctx, propagation.HeaderCarrier(r.Header)),
+		"WS /ws/{code} handshake",
+		trace.WithSpanKind(trace.SpanKindServer),
+		trace.WithAttributes(
+			attribute.String("http.request.method", r.Method),
+			attribute.String("http.route", "/ws/{code}"),
+		),
+	)
+	hsDone := false
+	endHandshake := func(status int, err error) {
+		if hsDone {
+			return
+		}
+		hsDone = true
+		if status != 0 {
+			hsSpan.SetAttributes(attribute.Int("http.response.status_code", status))
+		}
+		if err != nil {
+			hsSpan.RecordError(err)
+			hsSpan.SetStatus(codes.Error, err.Error())
+		}
+		hsSpan.End()
+	}
+	defer endHandshake(0, nil)
+	connLink := trace.LinkFromContext(hsCtx)
+
+	rm, err := s.Hub.Store.GetRoomByCode(hsCtx, code)
 	if errors.Is(err, store.ErrNotFound) {
 		http.Error(w, "room not found", http.StatusNotFound)
+		endHandshake(http.StatusNotFound, nil)
 		return
 	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		endHandshake(http.StatusInternalServerError, err)
 		return
 	}
 
@@ -43,12 +89,14 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	c, err := r.Cookie(cookieName)
 	if err != nil || c.Value == "" {
 		http.Error(w, "not joined", http.StatusUnauthorized)
+		endHandshake(http.StatusUnauthorized, nil)
 		return
 	}
 	participantID := c.Value
-	p, err := s.Hub.Store.GetParticipant(ctx, participantID)
+	p, err := s.Hub.Store.GetParticipant(hsCtx, participantID)
 	if err != nil || p.RoomID != rm.ID {
 		http.Error(w, "not joined", http.StatusUnauthorized)
+		endHandshake(http.StatusUnauthorized, nil)
 		return
 	}
 
@@ -62,6 +110,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	conn, err := websocket.Accept(w, r, opts)
 	if err != nil {
 		slog.Error("ws accept", "err", err)
+		endHandshake(0, err)
 		return
 	}
 	defer conn.Close(websocket.StatusInternalError, "closing")
@@ -72,10 +121,11 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	defer s.Hub.Unregister(client)
 
 	// notify others of join (if first connection)
-	_ = s.Hub.OnJoin(ctx, rm.ID, participantID)
+	_ = s.Hub.OnJoin(hsCtx, rm.ID, participantID)
 
 	// send initial state to this client
-	s.Hub.SendInitialState(ctx, client)
+	s.Hub.SendInitialState(hsCtx, client)
+	endHandshake(http.StatusSwitchingProtocols, nil)
 
 	// writer goroutine
 	writerCtx, cancelWriter := context.WithCancel(context.Background())
@@ -114,8 +164,32 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		if err := json.Unmarshal(data, &m); err != nil {
 			continue
 		}
-		s.dispatch(ctx, rm.ID, participantID, m)
+		if untracedWSTypes[m.Type] {
+			s.dispatch(ctx, rm.ID, participantID, m)
+			continue
+		}
+		mctx, span := tracer.Start(ctx, "WS "+wsSpanType(m.Type),
+			trace.WithNewRoot(),
+			trace.WithLinks(connLink),
+			trace.WithSpanKind(trace.SpanKindServer),
+			trace.WithAttributes(
+				attribute.String("http.route", "/ws/{code}"),
+				attribute.String("ebifly.ws.message_type", m.Type),
+			),
+		)
+		s.dispatch(mctx, rm.ID, participantID, m)
+		span.End()
 	}
+}
+
+// wsSpanType keeps span names bounded: unknown (client-controlled) message
+// types collapse into "unknown".
+func wsSpanType(t string) string {
+	switch t {
+	case "vote", "spectate", "setTopic", "setName", "reveal", "nextRound", "kick":
+		return t
+	}
+	return "unknown"
 }
 
 const (

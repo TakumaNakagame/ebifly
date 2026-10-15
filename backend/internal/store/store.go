@@ -3,12 +3,16 @@ package store
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	_ "embed"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/XSAM/otelsql"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	_ "modernc.org/sqlite"
 )
 
@@ -20,7 +24,25 @@ type Store struct {
 }
 
 func Open(path string) (*Store, error) {
-	db, err := sql.Open("sqlite", path+"?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)")
+	db, err := otelsql.Open("sqlite", path+"?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)",
+		otelsql.WithAttributes(attribute.String("db.system.name", "sqlite")),
+		otelsql.WithSpanNameFormatter(sqlSpanName),
+		otelsql.WithSpanOptions(otelsql.SpanOptions{
+			DisableErrSkip:       true,
+			OmitConnResetSession: true,
+			OmitConnPrepare:      true,
+			OmitRows:             true,
+			OmitConnectorConnect: true,
+			// Only trace queries that belong to an existing trace (an HTTP
+			// request, a WebSocket message, the TTL sweep). Background work
+			// on context.Background() — health-check pings, offline-grace
+			// timers, per-message TouchParticipant on pings — stays silent
+			// instead of producing a flood of one-span root traces.
+			SpanFilter: func(ctx context.Context, _ otelsql.Method, _ string, _ []driver.NamedValue) bool {
+				return trace.SpanContextFromContext(ctx).IsValid()
+			},
+		}),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -40,6 +62,17 @@ func Open(path string) (*Store, error) {
 		}
 	}
 	return &Store{db: db}, nil
+}
+
+// sqlSpanName names database spans "<method> <VERB>", e.g.
+// "sql.conn.query SELECT", so the statement kind is visible in trace lists
+// without putting the full SQL (which stays in db.query.text) in the name.
+func sqlSpanName(_ context.Context, method otelsql.Method, query string) string {
+	verb, _, _ := strings.Cut(strings.TrimSpace(query), " ")
+	if verb == "" {
+		return string(method)
+	}
+	return string(method) + " " + strings.ToUpper(verb)
 }
 
 func (s *Store) Close() error {

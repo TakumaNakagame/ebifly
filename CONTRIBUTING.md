@@ -28,7 +28,7 @@ docker compose up --build
 
 ## コーディング規約
 
-- **Backend (Go 1.25)**: `gofmt` / `go vet` が通ること
+- **Backend (Go 1.26)**: `gofmt` / `go vet` が通ること
 - **Frontend (TypeScript / React 19)**: `npm run lint` が通ること、型は積極的に付ける
 - **コミットメッセージ**: 1 行目 50 文字前後で要約、本文に「何を」「なぜ」。日本語・英語どちらでも OK
 
